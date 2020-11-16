@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>LINE 聊天記錄統計器</title>
+	<style type="text/css">
+	* {
+		font-family: monospace;
+	}
+	textarea {
+		width: 400px;
+		height: 150px;
+	}
+	.pageTitles {
+		overflow: hidden;
+		border: 1px solid #ccc;
+		background-color: #f1f1f1;
+	}
+	.pageTitles button {
+		background-color: inherit;
+		float: left;
+		border: none;
+		outline: none;
+		cursor: pointer;
+		padding: 14px 16px;
+		transition: 0.3s;
+	}
+	.pageTitles button:hover {
+		background-color: #ddd;
+	}
+	.pageTitles button.active {
+		background-color: #ccc;
+	}
+	.pageContent {
+		display: none;
+		padding: 6px 12px;
+		border: 1px solid #ccc;
+		border-top: none;
+		animation: fadeEffect 1s;
+	}
+	@keyframes fadeEffect {
+		from {opacity: 0;}
+		to {opacity: 1;}
+	}
+	</style>
+</head>
+<body>
+<div style="padding: 5px;">
+<img src="./tutorial.jpg" alt="tutorial" width="749" height="300"><br>
+<br>
+<label>（請使用電腦版 Google Chrome 瀏覽器，以避免記錄檔過大無法執行）</label><br>
+<br>
+<label for="inputFile">貼上或選擇聊天記錄檔：</label><img id="fileLoadingImage" src="./ajax-loader.gif" style="visibility: hidden;"><br>
+<input type="file" id="inputFile">
+</div>
+<div style="padding: 5px;"><textarea id="logContent"></textarea></div>
+<div style="padding: 3px;">
+<label>計入總量：</label><br>
+<table>
+<tr>
+<td><label><input id="countMessageCheckbox" type="checkbox" checked="checked">訊息</label></td>
+<td><label><input id="countStickerCheckbox" type="checkbox" checked="checked">貼圖</label></td>
+</tr>
+<tr>
+<td><label><input id="countPhotoCheckbox" type="checkbox" checked="checked">照片影片</label></td>
+<td><label><input id="countRevokeCheckbox" type="checkbox" checked="checked">收回訊息</label></td>
+</tr>
+<tr>
+<td><label><input id="countChangeGroupNameCheckbox" type="checkbox" checked="checked">更改群組名稱</label></td>
+<td><label><input id="countChangeGroupAvatarCheckbox" type="checkbox" checked="checked">更改群組圖片</label></td>
+</tr>
+<tr>
+<td><label><input id="countInviteCheckbox" type="checkbox" checked="checked">邀人</label></td>
+<td><label><input id="countKickCheckbox" type="checkbox" checked="checked">踢人</label></td>
+</tr>
+</table>
+</div>
+<div style="padding: 5px;">
+<button id="processButton" onclick="processData()" disabled="disabled" style="width: 200px; height: 30px;">統計</button>
+
+<button onclick="resetAll()" style="width: 200px; height: 30px;">全部重置</button>
+</div>
+<div id="pageTitles" class="pageTitles"></div>
+<div id="pageContents" class="pageContents"></div>
+<div><h4>LINE 聊天記錄統計器 by Randal (2019/03/10)</h4></div>
+
+<script type="text/javascript">
+let counter = {};
+let currentMonth;
+const allTime = '全部時間';
+
+let countMessage = true;
+let countSticker = true;
+let countPhoto = true;
+let countRevoke = true;
+let countChangeGroupName = true;
+let countChangeGroupAvatar = true;
+let countInvite = true;
+let countKick = true;
+
+let generatedHtmlElements = [];
+
+document.getElementById('inputFile').addEventListener('change', getFile);
+
+document.getElementById('logContent').addEventListener('input', function(event) {
+	document.getElementById('processButton').disabled = (event.target.value.length === 0);
+});
+
+function setLogContent(text) {
+	document.getElementById('logContent').value = text;
+	document.getElementById('processButton').disabled = (text.length === 0);
+}
+
+function getFile(event) {
+	const input = event.target;
+	if ('files' in input && input.files.length > 0) {
+		placeFileContent(input.files[0]);
+	}
+}
+
+function placeFileContent(file) {
+	document.getElementById('fileLoadingImage').style.visibility = 'visible';
+	readFileContent(file).then(content => {
+		setLogContent(content);
+		document.getElementById('fileLoadingImage').style.visibility = 'hidden';
+	}).catch(error => console.log(error));
+}
+
+function readFileContent(file) {
+	const reader = new FileReader();
+	return new Promise((resolve, reject) => {
+		reader.onload = event => resolve(event.target.result);
+		reader.onerror = error => reject(error);
+		reader.readAsText(file);
+	});
+}
+
+function addSpeakerCounter(speaker) {
+	if (speaker in counter[currentMonth]) {
+		++counter[currentMonth][speaker];
+	} else {
+		counter[currentMonth][speaker] = 1;
+	}
+	if (speaker in counter[allTime]) {
+		++counter[allTime][speaker];
+	} else {
+		counter[allTime][speaker] = 1;
+	}
+}
+
+function countSpeakerIfMatched(regex, content) {
+	const match = regex.exec(content);
+	if (match && match.length >= 2) {
+		addSpeakerCounter(match[1]);
+	}
+}
+
+function parseAction(content) {
+	if (countRevoke) {
+		countSpeakerIfMatched(/(.+?)已收回訊息/, content);
+	}
+	if (countChangeGroupName) {
+		countSpeakerIfMatched(/(.+?)已將群組名稱改為(.+?)/, content);
+	}
+	if (countChangeGroupAvatar) {
+		countSpeakerIfMatched(/(.+?)更改了群組圖片/, content);
+	}
+	if (countInvite) {
+		countSpeakerIfMatched(/(.+?)邀請(.+?)加入/, content);
+	}
+	if (countKick) {
+		countSpeakerIfMatched(/(.+?)已讓(.+?)退出/, content);
+	}
+	/*
+	群組通話已結束。
+	{speaker}刪除了「{albumName}」相簿內的照片
+	{speaker}已將相簿名稱由「{albumName}」改為「{albumName}」
+	*/
+}
+
+function parseMessage(speaker, content) {
+	if (content.startsWith('☎ ')) {
+		// 發起群組通話
+	} else if (content.startsWith('[相簿]')) {
+		// 上傳照片至相簿
+	} else if (/已建立「.+」活動/.test(content) || /「.+」活動內容已更新/.test(content) || /「.+」活動已被刪除/.test(content)) {
+		// 活動
+	} else {
+		let countThisContent = false;
+
+		if (content === '[貼圖]') {
+			countThisContent = countSticker;
+		} else if (content === '[照片]' || content === '[影片]') {
+			countThisContent = countPhoto;
+		} else {
+			countThisContent = countMessage;
+		}
+
+		if (countThisContent) {
+			addSpeakerCounter(speaker);
+		}
+	}
+}
+
+function getCheckboxStatus() {
+	countMessage = document.getElementById('countMessageCheckbox').checked;
+	countSticker = document.getElementById('countStickerCheckbox').checked;
+	countPhoto = document.getElementById('countPhotoCheckbox').checked;
+	countRevoke = document.getElementById('countRevokeCheckbox').checked;
+	countChangeGroupName = document.getElementById('countChangeGroupNameCheckbox').checked;
+	countChangeGroupAvatar = document.getElementById('countChangeGroupAvatarCheckbox').checked;
+	countInvite = document.getElementById('countInviteCheckbox').checked;
+	countKick = document.getElementById('countKickCheckbox').checked;
+}
+
+function processData() {
+	reset();
+	getCheckboxStatus();
+
+	const lines = document.getElementById('logContent').value.split('\n');
+
+	for (const line of lines) {
+		const tuple = line.trim().split('\t')
+		if (tuple.length === 1) {
+			if (line.match(/^\d{4}\/\d{1,2}\/\d{1,2}（.*?）$/)) {
+				// '2019/03/10（日）' or '2019/03/10(週日)'
+				const lastSlashPos = line.lastIndexOf('/')
+				currentMonth = line.substring(0, lastSlashPos);
+				if (!(currentMonth in counter)) {
+					counter[currentMonth] = {};
+				}
+			}
+		} else {
+			const timestamp = tuple[0];
+			if ((timestamp.length === 5 && timestamp[2] === ':') /* Ex: "19:34" */ ||
+			    (timestamp.length === 7 && timestamp[4] === ':') /* Ex: "下午07:34" */) {
+				if (tuple.length === 2) {
+					parseAction(tuple[1]);
+				} else if (tuple.length === 3) {
+					parseMessage(tuple[1], tuple[2]);
+				}
+			}
+		}
+	}
+
+	console.log(counter);
+	for (let month in counter) {
+		addPage(month, serialize(counter[month]));
+	}
+
+	const pageTitles = document.getElementsByClassName('pageTitle');
+	if (pageTitles.length > 0) {
+		pageTitles[pageTitles.length - 1].click();
+	}
+}
+
+function serialize(countingDictionary) {
+	let html = '';
+	let sortable = [];
+	for (const speaker in countingDictionary) {
+		sortable.push([speaker, countingDictionary[speaker]]);
+	}
+	sortable.sort(function(a, b) { return b[1] - a[1]; });
+	for (const [speaker, count] of sortable) {
+		html += speaker + ': ' + count + '<br>';
+	}
+	return html;
+}
+
+function addPage(title, content) {
+	let pageTitle = document.createElement('button');
+	pageTitle.className = 'pageTitle';
+	pageTitle.addEventListener('click', event => {
+		openPage(event, title);
+	});
+	pageTitle.appendChild(document.createTextNode(title));
+	document.getElementById('pageTitles').appendChild(pageTitle);
+	generatedHtmlElements.push(pageTitle);
+
+	let pageContent = document.createElement('div');
+	pageContent.id = title;
+	pageContent.className = 'pageContent';
+	pageContent.innerHTML = content;
+	document.getElementById('pageContents').appendChild(pageContent);
+	generatedHtmlElements.push(pageContent);
+}
+
+function openPage(event, title) {
+	const pageContents = document.getElementsByClassName('pageContent');
+	for (let pageContent of pageContents) {
+		pageContent.style.display = 'none';
+	}
+
+	const pageTitles = document.getElementsByClassName('pageTitle');
+	for (let pageTitle of pageTitles) {
+		pageTitle.className = pageTitle.className.replace(' active', '');
+	}
+
+	document.getElementById(title).style.display = 'block';
+	event.currentTarget.className += ' active';
+}
+
+function reset() {
+	counter = {};
+	counter[allTime] = {};
+	currentMonth = '未知的月份';
+
+	for (let element of generatedHtmlElements) {
+		element.outerHTML = '';
+	}
+	generatedHtmlElements = [];
+}
+
+function resetAll() {
+	document.getElementById('inputFile').value = '';
+	setLogContent('');
+	reset();
+}
+</script>
+</body>
+</html>
