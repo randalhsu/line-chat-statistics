@@ -70,7 +70,7 @@
 <td><label><input id="countChangeGroupAvatarCheckbox" type="checkbox" checked="checked">更改群組圖片</label></td>
 </tr>
 <tr>
-<td><label><input id="countInviteCheckbox" type="checkbox" checked="checked">邀人</label></td>
+<td><label><input id="countInviteCheckbox" type="checkbox" checked="checked">邀人數量</label></td>
 <td><label><input id="countKickCheckbox" type="checkbox" checked="checked">踢人</label></td>
 </tr>
 </table>
@@ -98,6 +98,8 @@ let countChangeGroupName = true;
 let countChangeGroupAvatar = true;
 let countInvite = true;
 let countKick = true;
+
+let invitationStatistics = {};
 
 let generatedHtmlElements = [];
 
@@ -156,6 +158,24 @@ function countSpeakerIfMatched(regex, content) {
 	}
 }
 
+function countInviteesIfMatched(content) {
+	const regex = /(.+?)已新增(.+?)至群組/;
+	const match = content.match(regex);
+	if (match && match.length >= 2) {
+		const inviter = match[1];
+		const invitees = match[2].split(", ");
+		if (!(inviter in invitationStatistics)) {
+			invitationStatistics[inviter] = invitees;
+		} else {
+			invitationStatistics[inviter].push(...invitees);
+		}
+
+		for (let i = 0; i < invitees.length; ++i) {
+			addSpeakerCounter(inviter);
+		}
+	}
+}
+
 function parseAction(content) {
 	if (countRevoke) {
 		countSpeakerIfMatched(/(.+?)已收回訊息/, content);
@@ -167,7 +187,7 @@ function parseAction(content) {
 		countSpeakerIfMatched(/(.+?)更改了群組圖片/, content);
 	}
 	if (countInvite) {
-		countSpeakerIfMatched(/(.+?)已邀請(.+?)加入群組/, content);
+		countInviteesIfMatched(content);
 	}
 	if (countKick) {
 		countSpeakerIfMatched(/(.+?)已[將讓](.+?)退出群組/, content);
@@ -236,16 +256,17 @@ function processData() {
 			const timestamp = tuple[0];
 			if ((timestamp.length === 5 && timestamp[2] === ':') /* Ex: "19:34" */ ||
 			    (timestamp.length === 7 && timestamp[4] === ':') /* Ex: "下午07:34" */) {
-				if (tuple.length === 2) {
-					parseAction(tuple[1]);
-				} else if (tuple.length === 3) {
+				if (tuple[1] === "") {
+					parseAction(tuple[2]);
+				} else {
 					parseMessage(tuple[1], tuple[2]);
 				}
 			}
 		}
 	}
 
-	console.log(counter);
+	console.log("對話總量", counter);
+	console.log("邀請總量", invitationStatistics);
 	for (let month in counter) {
 		addPage(month, serialize(counter[month]));
 	}
