@@ -265,8 +265,15 @@ function processData() {
 		}
 	}
 
-	console.log("對話總量", counter);
-	console.log("邀請總量", invitationStatistics);
+	console.log("對話總量：", counter);
+
+	const sortedInvitationStatistics = Object.entries(invitationStatistics).sort((a, b) => b[1].length - a[1].length);
+	let inviters_summary = "";
+	sortedInvitationStatistics.forEach(([inviter, invitees]) => {
+		inviters_summary += `${inviter} (${invitees.length}): ${invitees}\n`;
+	});
+	console.log(`邀請總量：\n${inviters_summary}`);
+
 	for (let month in counter) {
 		addPage(month, serialize(counter[month]));
 	}
