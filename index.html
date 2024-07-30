@@ -200,7 +200,12 @@ function parseAction(content) {
 }
 
 function parseMessage(speaker, content) {
-	if (content.startsWith('☎ ')) {
+	if (content === undefined) {
+		// First empty line of multiple lines
+		if (countMessage) {
+			addSpeakerCounter(speaker);
+		}
+	} else if (content.startsWith('☎ ')) {
 		// 發起群組通話
 	} else if (content.startsWith('[相簿]')) {
 		// 上傳照片至相簿
